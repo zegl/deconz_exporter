@@ -28,6 +28,7 @@ type deconzCollector struct {
 	energyPowerMetric        *prometheus.GaugeVec // Watt
 	energyConsumptionMetric  *prometheus.GaugeVec // kWh
 	sensorLastSeenSecondsAgo *prometheus.GaugeVec
+	sensorIsOpen             *prometheus.GaugeVec
 }
 
 var variableGroupLabelNames = []string{
@@ -124,6 +125,15 @@ func NewDeconzCollector(namespace string, log *zap.Logger, s *sensors.Sensors) p
 			},
 			variableGroupLabelNames,
 		),
+		sensorIsOpen: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "sensor",
+				Name:      "is_open",
+				Help:      "Boolean, if the sensor is currently open",
+			},
+			variableGroupLabelNames,
+		),
 	}
 }
 
@@ -137,6 +147,7 @@ func (c *deconzCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.energyPowerMetric.Describe(ch)
 	c.energyConsumptionMetric.Describe(ch)
 	c.sensorLastSeenSecondsAgo.Describe(ch)
+	c.sensorIsOpen.Describe(ch)
 }
 
 func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
@@ -149,6 +160,7 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 	c.energyPowerMetric.Reset()
 	c.energyConsumptionMetric.Reset()
 	c.sensorLastSeenSecondsAgo.Reset()
+	c.sensorIsOpen.Reset()
 
 	sens, err := c.sensors.GetAllSensors()
 	if err != nil {
@@ -186,6 +198,8 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 			c.energyPowerMetric.With(labels).Set(float64(l.State.Power))
 		case "ZHAConsumption":
 			c.energyConsumptionMetric.With(labels).Set(float64(l.State.Consumption))
+		case "ZHAOpenClose":
+			c.sensorIsOpen.With(labels).Set(gaugeValueBool[l.State.Open])
 		}
 
 		if l.Config.Battery > 0 {
@@ -210,4 +224,5 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 	c.energyPowerMetric.Collect(ch)
 	c.energyConsumptionMetric.Collect(ch)
 	c.sensorLastSeenSecondsAgo.Collect(ch)
+	c.sensorIsOpen.Collect(ch)
 }
