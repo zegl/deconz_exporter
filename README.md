@@ -17,3 +17,4 @@ Published to Docker Hub: `zegl/deconz_exporter:latest`
 * `deconz_energy_power`
 * `deconz_energy_consumption`
 * `deconz_sensor_last_seen_seconds_ago`
+* `deconz_sensor_is_open`
