@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"github.com/jurgen-kluft/go-conbee/sensors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"time"
 )
 
 var (
@@ -17,18 +19,22 @@ type deconzCollector struct {
 	logger  *zap.Logger
 	sensors *sensors.Sensors
 
-	batteryMetric           *prometheus.GaugeVec
-	temperatureMetric       *prometheus.GaugeVec
-	humidityMetric          *prometheus.GaugeVec
-	pressureMetric          *prometheus.GaugeVec
-	lightLevelMetric        *prometheus.GaugeVec
-	presenceMetric          *prometheus.GaugeVec
-	energyPowerMetric       *prometheus.GaugeVec // Watt
-	energyConsumptionMetric *prometheus.GaugeVec // kWh
+	batteryMetric            *prometheus.GaugeVec
+	temperatureMetric        *prometheus.GaugeVec
+	humidityMetric           *prometheus.GaugeVec
+	pressureMetric           *prometheus.GaugeVec
+	lightLevelMetric         *prometheus.GaugeVec
+	presenceMetric           *prometheus.GaugeVec
+	energyPowerMetric        *prometheus.GaugeVec // Watt
+	energyConsumptionMetric  *prometheus.GaugeVec // kWh
+	sensorLastSeenSecondsAgo *prometheus.GaugeVec
 }
 
 var variableGroupLabelNames = []string{
 	"name",
+	"model_id",
+	"sw_version",
+	"manufacturer_name",
 }
 
 func NewDeconzCollector(namespace string, log *zap.Logger, s *sensors.Sensors) prometheus.Collector {
@@ -109,6 +115,15 @@ func NewDeconzCollector(namespace string, log *zap.Logger, s *sensors.Sensors) p
 			},
 			variableGroupLabelNames,
 		),
+		sensorLastSeenSecondsAgo: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "sensor",
+				Name:      "last_seen_seconds_ago",
+				Help:      "Seconds since last update",
+			},
+			variableGroupLabelNames,
+		),
 	}
 }
 
@@ -121,6 +136,7 @@ func (c *deconzCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.presenceMetric.Describe(ch)
 	c.energyPowerMetric.Describe(ch)
 	c.energyConsumptionMetric.Describe(ch)
+	c.sensorLastSeenSecondsAgo.Describe(ch)
 }
 
 func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
@@ -132,6 +148,7 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 	c.presenceMetric.Reset()
 	c.energyPowerMetric.Reset()
 	c.energyConsumptionMetric.Reset()
+	c.sensorLastSeenSecondsAgo.Reset()
 
 	sens, err := c.sensors.GetAllSensors()
 	if err != nil {
@@ -148,7 +165,10 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		labels := prometheus.Labels{
-			"name": l.Name,
+			"name":              l.Name,
+			"model_id":          l.ModelID,
+			"manufacturer_name": l.ManufacturerName,
+			"sw_version":        l.SWVersion,
 		}
 
 		switch l.Type {
@@ -171,6 +191,14 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 		if l.Config.Battery > 0 {
 			c.batteryMetric.With(labels).Set(float64(l.Config.Battery))
 		}
+
+		if l.State.LastUpdated != "" {
+			if ts, err := time.Parse("2006-01-02T15:04:05.999", l.State.LastUpdated); err == nil {
+				c.sensorLastSeenSecondsAgo.With(labels).Set(time.Now().Sub(ts).Seconds())
+			} else {
+				fmt.Println(l.State.LastUpdated, err)
+			}
+		}
 	}
 
 	c.batteryMetric.Collect(ch)
@@ -181,4 +209,5 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 	c.presenceMetric.Collect(ch)
 	c.energyPowerMetric.Collect(ch)
 	c.energyConsumptionMetric.Collect(ch)
+	c.sensorLastSeenSecondsAgo.Collect(ch)
 }
