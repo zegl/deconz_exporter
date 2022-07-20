@@ -184,8 +184,6 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		switch l.Type {
-		case "ZHATemperature":
-			c.temperatureMetric.With(labels).Set(float64(l.State.Temperature) / 100)
 		case "ZHAHumidity":
 			c.humidityMetric.With(labels).Set(float64(l.State.Humidity) / 100)
 		case "ZHAPressure":
@@ -204,6 +202,11 @@ func (c *deconzCollector) Collect(ch chan<- prometheus.Metric) {
 
 		if l.Config.Battery > 0 {
 			c.batteryMetric.With(labels).Set(float64(l.Config.Battery))
+		}
+
+		// ZHATemperature and multiple other sensors have temperatures
+		if l.State.Temperature > 0 {
+			c.temperatureMetric.With(labels).Set(float64(l.State.Temperature) / 100)
 		}
 
 		if l.State.LastUpdated != "" {
